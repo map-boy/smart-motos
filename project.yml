@@ -30,11 +30,11 @@ targets:
           - FirebaseStorage
           - FirebaseFunctions
           - FirebaseMessaging
-          - FirebaseCore
 packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
     from: 10.29.0
+
 
 
 
