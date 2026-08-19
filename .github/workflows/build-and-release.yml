@@ -31,6 +31,10 @@ jobs:
           echo "--- XCRemoteSwiftPackageReference / XCSwiftPackageProductDependency (Firebase) ---"
           grep -B2 -A5 "FirebaseCore" SmartMotos.xcodeproj/project.pbxproj || echo "FirebaseCore STRING NOT FOUND AT ALL IN PBXPROJ"
 
+      - name: Resolve Package Dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies -project SmartMotos.xcodeproj -scheme SmartMotos
+
       - name: Build for Simulator
         run: |
           xcodebuild -project SmartMotos.xcodeproj \
@@ -71,3 +75,4 @@ jobs:
           files: ./release-assets/SmartMotos-simulator.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
