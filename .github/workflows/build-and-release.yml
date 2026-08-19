@@ -1,92 +1,46 @@
-name: Build and Release (Android & iOS)
-
+name: Build and Release (iOS)
 on:
   push:
     tags:
       - 'v*'
-
 jobs:
-  build-android:
-    name: Build Android APK
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-          cache: 'gradle'
-
-      - name: Grant Execute Permission for Gradle
-        run: chmod +x gradlew
-
-      - name: Build Android Release APK
-        run: ./gradlew assembleRelease
-
-      - name: Upload Android APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-release-apk
-          path: app/build/outputs/apk/release/*.apk
-
   build-ios:
     name: Build iOS App
     runs-on: macos-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: 'latest-stable'
-
       - name: Build iOS Application
-        run: |
-          cd ios
-          swiftc -typecheck *.swift
-
+        run: swiftc -typecheck *.swift
       - name: Upload iOS Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-release-build
-          path: ios/
+          path: ./*.swift
 
   create-release:
     name: Create GitHub Release
-    needs: [build-android, build-ios]
+    needs: [build-ios]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Download Android Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: android-release-apk
-          path: ./release-assets/android
-
       - name: Download iOS Artifact
         uses: actions/download-artifact@v4
         with:
           name: ios-release-build
           path: ./release-assets/ios
-
       - name: Zip iOS Output
         run: |
           cd ./release-assets/ios
           zip -r ../smart-motos-ios.zip .
-
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            ./release-assets/android/*.apk
-            ./release-assets/smart-motos-ios.zip
+          files: ./release-assets/smart-motos-ios.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
