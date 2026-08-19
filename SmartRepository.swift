@@ -1,4 +1,4 @@
-import Foundation
+﻿import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
@@ -113,7 +113,7 @@ class SmartRepository: ObservableObject {
             .whereField("driverId", isEqualTo: uid)
             .addSnapshotListener { [weak self] snapshot, _ in
                 guard let self = self, let documents = snapshot?.documents else { return }
-                let trips = documents.compactMap { doc in self?.mapRideTrip(id: doc.documentID, d: doc.data()) }
+                let trips = documents.compactMap { doc in self.mapRideTrip(id: doc.documentID, d: doc.data()) }
                 self.incomingDriverRequest = trips.first(where: { $0.status == .offered && $0.offeredDriverId == uid })
                 self.activeRide = trips.first(where: { $0.status == .driverAssigned || $0.status == .driverArrived || $0.status == .inProgress })
             }
