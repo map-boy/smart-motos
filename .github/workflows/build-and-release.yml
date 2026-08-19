@@ -10,17 +10,41 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: 'latest-stable'
-      - name: Build iOS Application
-        run: swiftc -typecheck *.swift
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Restore GoogleService-Info.plist
+        run: echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}" | base64 --decode > GoogleService-Info.plist
+
+      - name: Generate Xcode Project
+        run: xcodegen generate
+
+      - name: Build for Simulator
+        run: |
+          xcodebuild -project SmartMotos.xcodeproj \
+            -scheme SmartMotos \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Zip .app for Appetize
+        run: |
+          cd build/Build/Products/Debug-iphonesimulator
+          zip -r SmartMotos-simulator.zip SmartMotos.app
+
       - name: Upload iOS Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-release-build
-          path: ./*.swift
+          path: build/Build/Products/Debug-iphonesimulator/SmartMotos-simulator.zip
 
   create-release:
     name: Create GitHub Release
@@ -33,14 +57,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ios-release-build
-          path: ./release-assets/ios
-      - name: Zip iOS Output
-        run: |
-          cd ./release-assets/ios
-          zip -r ../smart-motos-ios.zip .
+          path: ./release-assets
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./release-assets/smart-motos-ios.zip
+          files: ./release-assets/SmartMotos-simulator.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
