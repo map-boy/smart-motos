@@ -31,7 +31,13 @@ targets:
         product: FirebaseStorage
       - package: Firebase
         product: FirebaseFunctions
+      - package: Firebase
+        product: FirebaseMessaging
+      - package: Firebase
+        product: FirebaseCore
 packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
     from: 10.29.0
+
+
