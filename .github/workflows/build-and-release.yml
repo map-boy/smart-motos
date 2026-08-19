@@ -1,4 +1,4 @@
-name: Build and Release (iOS)
+﻿name: Build and Release (iOS)
 on:
   push:
     tags:
@@ -24,6 +24,12 @@ jobs:
 
       - name: Generate Xcode Project
         run: xcodegen generate
+      - name: Debug - Inspect package dependencies
+        run: |
+          echo "--- packageProductDependencies section ---"
+          grep -A 30 "packageProductDependencies" SmartMotos.xcodeproj/project.pbxproj || echo "NOT FOUND"
+          echo "--- XCRemoteSwiftPackageReference / XCSwiftPackageProductDependency (Firebase) ---"
+          grep -B2 -A5 "FirebaseCore" SmartMotos.xcodeproj/project.pbxproj || echo "FirebaseCore STRING NOT FOUND AT ALL IN PBXPROJ"
 
       - name: Build for Simulator
         run: |
