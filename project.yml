@@ -1,0 +1,37 @@
+﻿name: SmartMotos
+options:
+  bundleIdPrefix: com.mapboy.smartmotos
+  deploymentTarget:
+    iOS: "16.0"
+configs:
+  Debug: debug
+targets:
+  SmartMotos:
+    type: application
+    platform: iOS
+    sources:
+      - path: .
+        includes:
+          - "*.swift"
+        excludes:
+          - "project.yml"
+      - path: GoogleService-Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mapboy.smartmotos
+        INFOPLIST_FILE: Info.plist
+        CODE_SIGNING_ALLOWED: NO
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseStorage
+      - package: Firebase
+        product: FirebaseFunctions
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 10.29.0
