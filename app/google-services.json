@@ -1,0 +1,63 @@
+{
+  "project_info": {
+    "project_number": "532787193673",
+    "project_id": "smart-motos-926b9",
+    "storage_bucket": "smart-motos-926b9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:532787193673:android:24f639fd5bb5a70ab7dc98",
+        "android_client_info": {
+          "package_name": "com.nihonor.smartmotosapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "532787193673-4ctnserjo8edhng0sqv3ah3diqoq1rte.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nihonor.smartmotosapp",
+            "certificate_hash": "39a27c440928753933a9fb7626d55b87eddd7455"
+          }
+        },
+        {
+          "client_id": "532787193673-oagt95e4qbvq2pbli9qia2j98gf8b3b7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nihonor.smartmotosapp",
+            "certificate_hash": "cc115a1f72573df2feba846e6c88ccc9839b719c"
+          }
+        },
+        {
+          "client_id": "532787193673-utdulsdcvqddulb01mghgk2t56qape35.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nihonor.smartmotosapp",
+            "certificate_hash": "50c053bd4ff4e388396021b45591713aad24d440"
+          }
+        },
+        {
+          "client_id": "532787193673-mav1ei5nhqsf2neg0gjeammvnb873i88.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAk5m5Y0GFos6PnN3taFz3RmxALZyJED4M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "532787193673-mav1ei5nhqsf2neg0gjeammvnb873i88.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
