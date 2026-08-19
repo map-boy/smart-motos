@@ -1,6 +1,0 @@
-{
-  "name": "Smart Motos",
-  "description": "Native Android motorcycle ride-hailing app with passenger and driver modes, wallet management, booking, live navigation, and analytics.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
