@@ -1,4 +1,4 @@
-﻿import Foundation
+import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
@@ -43,6 +43,19 @@ class SmartRepository: ObservableObject {
     @Published var supportMessages: [SupportMessage] = [
         SupportMessage(id: "msg-1", sender: "Support Bot", text: "Hi there! Welcome to Smart Motos support. How can we help you today?", isUser: false, timeAgo: "09:00 AM")
     ]
+    @Published var lastFirestoreError: String? = nil
+
+    /// Centralized logging so every listener failure is visible instead of silently
+    /// dropping data (previously "trips" failed with FAILED_PRECONDITION due to a
+    /// missing composite index and nobody could tell from the UI or logs why the
+    /// rider's trip history was empty).
+    private func logListenerError(_ context: String, _ error: Error?) {
+        guard let error = error else { return }
+        print("🔥 SmartRepository[\(context)] Firestore listener error: \(error.localizedDescription)")
+        DispatchQueue.main.async { [weak self] in
+            self?.lastFirestoreError = "\(context): \(error.localizedDescription)"
+        }
+    }
 
     private init() {
         self.isAuthenticated = auth.currentUser != nil
@@ -64,8 +77,10 @@ class SmartRepository: ObservableObject {
 
     private func attachListeners(uid: String) {
         userListener?.remove()
-        userListener = db.collection("users").document(uid).addSnapshotListener { [weak self] snapshot, _ in
-            guard let self = self, let snapshot = snapshot, snapshot.exists, let data = snapshot.data() else { return }
+        userListener = db.collection("users").document(uid).addSnapshotListener { [weak self] snapshot, error in
+            guard let self = self else { return }
+            self.logListenerError("user profile", error)
+            guard let snapshot = snapshot, snapshot.exists, let data = snapshot.data() else { return }
             let profile = self.mapUserProfile(id: uid, data: data)
             self.currentUser = profile
             self.currentRole = profile.role
@@ -81,8 +96,10 @@ class SmartRepository: ObservableObject {
         tripsListener = db.collection("trips")
             .whereField("riderId", isEqualTo: uid)
             .order(by: "createdAt", descending: true)
-            .addSnapshotListener { [weak self] snapshot, _ in
-                guard let self = self, let documents = snapshot?.documents else { return }
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                self.logListenerError("rider trips", error)
+                guard let documents = snapshot?.documents else { return }
                 self.tripHistory = documents.compactMap { doc in self.mapRideTrip(id: doc.documentID, d: doc.data()) }
             }
 
@@ -90,8 +107,10 @@ class SmartRepository: ObservableObject {
         nearbyDriversListener = db.collection("users")
             .whereField("role", isEqualTo: "driver")
             .whereField("isAvailableOnline", isEqualTo: true)
-            .addSnapshotListener { [weak self] snapshot, _ in
-                guard let self = self, let documents = snapshot?.documents else { return }
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                self.logListenerError("nearby drivers", error)
+                guard let documents = snapshot?.documents else { return }
                 self.nearbyDrivers = documents.compactMap { doc in
                     let data = doc.data()
                     guard let lat = data["latitude"] as? Double, let lon = data["longitude"] as? Double else { return nil }
@@ -111,8 +130,10 @@ class SmartRepository: ObservableObject {
         driverTripsListener?.remove()
         driverTripsListener = db.collection("trips")
             .whereField("driverId", isEqualTo: uid)
-            .addSnapshotListener { [weak self] snapshot, _ in
-                guard let self = self, let documents = snapshot?.documents else { return }
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                self.logListenerError("driver trips", error)
+                guard let documents = snapshot?.documents else { return }
                 let trips = documents.compactMap { doc in self.mapRideTrip(id: doc.documentID, d: doc.data()) }
                 self.incomingDriverRequest = trips.first(where: { $0.status == .offered && $0.offeredDriverId == uid })
                 self.activeRide = trips.first(where: { $0.status == .driverAssigned || $0.status == .driverArrived || $0.status == .inProgress })
@@ -124,8 +145,10 @@ class SmartRepository: ObservableObject {
 
         topupsListener = db.collection("topupRequests")
             .whereField("status", isEqualTo: "pending")
-            .addSnapshotListener { [weak self] snapshot, _ in
-                guard let self = self, let documents = snapshot?.documents else { return }
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                self.logListenerError("pending topups", error)
+                guard let documents = snapshot?.documents else { return }
                 self.pendingTopups = documents.compactMap { doc in
                     let d = doc.data()
                     return TopupRequest(
@@ -141,15 +164,19 @@ class SmartRepository: ObservableObject {
             }
 
         allUsersListener?.remove()
-        allUsersListener = db.collection("users").addSnapshotListener { [weak self] snapshot, _ in
-            guard let self = self, let documents = snapshot?.documents else { return }
+        allUsersListener = db.collection("users").addSnapshotListener { [weak self] snapshot, error in
+            guard let self = self else { return }
+            self.logListenerError("all users", error)
+            guard let documents = snapshot?.documents else { return }
             self.allUsers = documents.map { doc in self.mapUserProfile(id: doc.documentID, data: doc.data()) }
         }
 
         pendingDriversListener = db.collection("users")
             .whereField("driverApplication.status", isEqualTo: "pending")
-            .addSnapshotListener { [weak self] snapshot, _ in
-                guard let self = self, let documents = snapshot?.documents else { return }
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                self.logListenerError("pending drivers", error)
+                guard let documents = snapshot?.documents else { return }
                 self.pendingDrivers = documents.compactMap { doc in
                     let d = doc.data()
                     let app = d["driverApplication"] as? [String: Any] ?? [:]
@@ -326,4 +353,3 @@ class SmartRepository: ObservableObject {
         }
     }
 }
-
