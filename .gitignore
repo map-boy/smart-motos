@@ -14,3 +14,7 @@ functions/node_modules/
 kt_files_context.txt
 origin_version.swift
 .kotlin/
+*.apk
+*.aab
+build_log.txt
+app_src_listing.txt

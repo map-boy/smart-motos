@@ -1,0 +1,316 @@
+﻿package com.nihonor.smartmotosapp.data
+
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.functions.FirebaseFunctions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.tasks.await
+
+// Kotlin port of SmartRepository.swift. Field names/types must match SCHEMA.md exactly —
+// update SCHEMA.md first if the shape ever changes, then this file, not the other way around.
+object SmartRepository {
+
+    private val auth = FirebaseAuth.getInstance()
+    private val db = FirebaseFirestore.getInstance()
+    private val functions = FirebaseFunctions.getInstance("africa-south1")
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    private var userListener: ListenerRegistration? = null
+    private var tripsListener: ListenerRegistration? = null
+    private var nearbyDriversListener: ListenerRegistration? = null
+    private var driverTripsListener: ListenerRegistration? = null
+    private var topupsListener: ListenerRegistration? = null
+    private var pendingDriversListener: ListenerRegistration? = null
+    private var allUsersListener: ListenerRegistration? = null
+
+    private val _currentUser = MutableStateFlow<UserProfile?>(null)
+    val currentUser: StateFlow<UserProfile?> = _currentUser.asStateFlow()
+
+    private val _trips = MutableStateFlow<List<RideTrip>>(emptyList())
+    val trips: StateFlow<List<RideTrip>> = _trips.asStateFlow()
+
+    private val _nearbyDrivers = MutableStateFlow<List<DriverInfo>>(emptyList())
+    val nearbyDrivers: StateFlow<List<DriverInfo>> = _nearbyDrivers.asStateFlow()
+
+    private val _pendingTopups = MutableStateFlow<List<TopupRequest>>(emptyList())
+    val pendingTopups: StateFlow<List<TopupRequest>> = _pendingTopups.asStateFlow()
+
+    private val _pendingDrivers = MutableStateFlow<List<UserProfile>>(emptyList())
+    val pendingDrivers: StateFlow<List<UserProfile>> = _pendingDrivers.asStateFlow()
+
+    private val _isDriverOnline = MutableStateFlow(false)
+    val isDriverOnline: StateFlow<Boolean> = _isDriverOnline.asStateFlow()
+
+    // ---- mapping (mirrors SmartRepository.swift line-for-line) ----
+
+    private fun mapUserProfile(id: String, data: Map<String, Any?>): UserProfile {
+        @Suppress("UNCHECKED_CAST")
+        val driverApp = data["driverApplication"] as? Map<String, Any?>
+        val roleStr = data["role"] as? String
+        val role = when (roleStr) {
+            "driver" -> UserRole.DRIVER
+            "admin" -> UserRole.ADMIN
+            else -> UserRole.PASSENGER
+        }
+        return UserProfile(
+            id = id,
+            name = data["name"] as? String ?: "",
+            email = data["email"] as? String ?: "",
+            phone = data["phone"] as? String ?: "",
+            role = role,
+            photoUrl = data["photoUrl"] as? String,
+            walletBalanceRwf = (data["walletBalanceRwf"] as? Long)?.toInt() ?: 0,
+            serviceProvider = data["serviceProvider"] as? String ?: "MTN",
+            vehicleType = data["vehicleType"] as? String ?: "Bike",
+            licenseNumber = data["licenseNumber"] as? String ?: "",
+            verificationStatus = data["verificationStatus"] as? String ?: "verified",
+            isAvailableOnline = data["isAvailableOnline"] as? Boolean ?: true,
+            driverApplicationStatus = driverApp?.get("status") as? String ?: "",
+            inspectionCode = driverApp?.get("inspectionCode") as? String ?: "",
+            latitude = data["latitude"] as? Double,
+            longitude = data["longitude"] as? Double
+        )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun mapLocationPoint(m: Map<String, Any?>?): LocationPoint {
+        if (m == null) return LocationPoint()
+        return LocationPoint(
+            address = m["address"] as? String ?: "",
+            latitude = (m["latitude"] as? Double) ?: 0.0,
+            longitude = (m["longitude"] as? Double) ?: 0.0
+        )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun mapRideTrip(id: String, d: Map<String, Any?>): RideTrip? {
+        val pickupMap = d["pickup"] as? Map<String, Any?> ?: return null
+        val dropoffMap = d["dropoff"] as? Map<String, Any?> ?: return null
+        val statusStr = d["status"] as? String ?: "REQUESTED"
+        val status = try { RideStatus.valueOf(statusStr) } catch (e: Exception) { RideStatus.REQUESTED }
+
+        return RideTrip(
+            id = id,
+            riderId = d["riderId"] as? String ?: "",
+            orderType = d["orderType"] as? String ?: "",
+            recipientName = d["recipientName"] as? String,
+            recipientPhone = d["recipientPhone"] as? String,
+            cargoDescription = d["cargoDescription"] as? String,
+            riderName = d["riderName"] as? String ?: "",
+            driverId = d["driverId"] as? String,
+            driverName = d["driverName"] as? String,
+            driverAvatar = d["driverAvatar"] as? String,
+            driverRating = (d["driverRating"] as? Double)?.toFloat() ?: 0f,
+            vehiclePlate = d["vehiclePlate"] as? String ?: "",
+            pickup = mapLocationPoint(pickupMap),
+            dropoff = mapLocationPoint(dropoffMap),
+            status = status,
+            fareRwf = (d["fareRwf"] as? Long)?.toInt() ?: 0,
+            baseFareRwf = (d["baseFareRwf"] as? Long)?.toInt() ?: 0,
+            distanceKm = d["distanceKm"] as? Double ?: 0.0,
+            durationMins = (d["durationMins"] as? Long)?.toInt() ?: 0,
+            paymentMethod = d["paymentMethod"] as? String ?: "",
+            bargainAmountRwf = (d["bargainAmountRwf"] as? Long)?.toInt(),
+            ratingGiven = (d["ratingGiven"] as? Long)?.toInt() ?: 0,
+            ratingFeedback = d["ratingFeedback"] as? String,
+            timestamp = d["timestamp"] as? String ?: "",
+            offeredDriverId = d["offeredDriverId"] as? String
+        )
+    }
+
+    // ---- listeners ----
+
+    fun attachListeners(uid: String) {
+        userListener?.remove()
+        userListener = db.collection("users").document(uid).addSnapshotListener { snapshot, _ ->
+            if (snapshot != null && snapshot.exists()) {
+                val data = snapshot.data ?: return@addSnapshotListener
+                val profile = mapUserProfile(uid, data)
+                _currentUser.value = profile
+                _isDriverOnline.value = profile.isAvailableOnline
+            }
+        }
+
+        tripsListener?.remove()
+        tripsListener = db.collection("trips")
+            .whereEqualTo("riderId", uid)
+            .addSnapshotListener { snapshot, _ ->
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    doc.data?.let { mapRideTrip(doc.id, it) }
+                } ?: emptyList()
+                _trips.value = list
+            }
+
+        nearbyDriversListener?.remove()
+        nearbyDriversListener = db.collection("users")
+            .whereEqualTo("role", "driver")
+            .whereEqualTo("isAvailableOnline", true)
+            .addSnapshotListener { snapshot, _ ->
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    val data = doc.data ?: return@mapNotNull null
+                    val profile = mapUserProfile(doc.id, data)
+                    DriverInfo(
+                        id = profile.id,
+                        name = profile.name,
+                        phone = profile.phone,
+                        rating = 0f,
+                        plateNumber = "",
+                        avatarUrl = profile.photoUrl ?: "",
+                        currentLocation = LocationPoint(
+                            latitude = profile.latitude ?: 0.0,
+                            longitude = profile.longitude ?: 0.0
+                        ),
+                        vehicleType = profile.vehicleType
+                    )
+                } ?: emptyList()
+                _nearbyDrivers.value = list
+            }
+
+        driverTripsListener?.remove()
+        driverTripsListener = db.collection("trips")
+            .whereEqualTo("driverId", uid)
+            .addSnapshotListener { snapshot, _ ->
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    doc.data?.let { mapRideTrip(doc.id, it) }
+                } ?: emptyList()
+                // merged into the same trips flow; adjust if driver/rider views need separation
+                if (_trips.value.isEmpty()) _trips.value = list
+            }
+    }
+
+    fun detachListeners() {
+        userListener?.remove(); userListener = null
+        tripsListener?.remove(); tripsListener = null
+        nearbyDriversListener?.remove(); nearbyDriversListener = null
+        driverTripsListener?.remove(); driverTripsListener = null
+        detachAdminListeners()
+    }
+
+    fun attachAdminListeners() {
+        if (topupsListener != null || pendingDriversListener != null) return
+
+        topupsListener = db.collection("topupRequests")
+            .whereEqualTo("status", "pending")
+            .addSnapshotListener { snapshot, _ ->
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    val d = doc.data ?: return@mapNotNull null
+                    TopupRequest(
+                        id = doc.id,
+                        userId = d["userId"] as? String ?: "",
+                        userName = d["userName"] as? String ?: "",
+                        amountRwf = (d["amountRwf"] as? Long)?.toInt() ?: 0,
+                        momoNumber = d["momoNumber"] as? String ?: "",
+                        status = d["status"] as? String ?: "pending",
+                        timeAgo = d["timeAgo"] as? String ?: ""
+                    )
+                } ?: emptyList()
+                _pendingTopups.value = list
+            }
+
+        pendingDriversListener = db.collection("users")
+            .whereEqualTo("driverApplication.status", "pending")
+            .addSnapshotListener { snapshot, _ ->
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    doc.data?.let { mapUserProfile(doc.id, it) }
+                } ?: emptyList()
+                _pendingDrivers.value = list
+            }
+    }
+
+    fun detachAdminListeners() {
+        topupsListener?.remove(); topupsListener = null
+        pendingDriversListener?.remove(); pendingDriversListener = null
+        allUsersListener?.remove(); allUsersListener = null
+        _pendingTopups.value = emptyList()
+        _pendingDrivers.value = emptyList()
+    }
+
+    // ---- writes ----
+
+    fun toggleDriverOnline(online: Boolean) {
+        _isDriverOnline.value = online
+        val uid = auth.currentUser?.uid ?: return
+        db.collection("users").document(uid).update("isAvailableOnline", online)
+    }
+
+    fun updateDriverLocation(latitude: Double, longitude: Double) {
+        val uid = auth.currentUser?.uid ?: return
+        db.collection("users").document(uid)
+            .update(mapOf("latitude" to latitude, "longitude" to longitude))
+    }
+
+    fun updateUserProfile(name: String, email: String, phone: String) {
+        val uid = auth.currentUser?.uid ?: return
+        db.collection("users").document(uid)
+            .update(mapOf("name" to name, "email" to email, "phone" to phone))
+    }
+
+    fun requestWalletTopup(amount: Int) {
+        val user = _currentUser.value ?: return
+        if (user.id.isEmpty()) return
+        val newReq = mapOf(
+            "userId" to user.id,
+            "userName" to user.name,
+            "amountRwf" to amount,
+            "momoNumber" to user.phone,
+            "status" to "pending",
+            "timeAgo" to "just now"
+        )
+        db.collection("topupRequests").add(newReq)
+    }
+
+    fun approveTopup(id: String) {
+        db.collection("topupRequests").document(id).get()
+            .addOnSuccessListener { doc ->
+                val data = doc.data ?: return@addOnSuccessListener
+                val userId = data["userId"] as? String ?: return@addOnSuccessListener
+                val amount = (data["amountRwf"] as? Long) ?: 0L
+                db.collection("topupRequests").document(id).update("status", "approved")
+                db.collection("users").document(userId)
+                    .update("walletBalanceRwf", FieldValue.increment(amount))
+            }
+    }
+
+    fun rejectTopup(id: String) {
+        db.collection("topupRequests").document(id).update("status", "rejected")
+    }
+
+    fun approveDriver(driverId: String) {
+        db.collection("users").document(driverId).update(
+            mapOf(
+                "role" to "driver",
+                "driverApplication.status" to "approved"
+            )
+        )
+    }
+
+    fun rejectDriver(driverId: String) {
+        db.collection("users").document(driverId)
+            .update("driverApplication.status", "rejected")
+    }
+
+    // Matches the callable createUserByAdmin function in functions/src/index.ts.
+    suspend fun addManualUser(name: String, email: String, phone: String, role: UserRole): Result<Unit> {
+        return try {
+            functions.getHttpsCallable("createUserByAdmin").call(
+                mapOf(
+                    "name" to name,
+                    "email" to email,
+                    "phone" to phone,
+                    "role" to role.name.lowercase()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}
+
