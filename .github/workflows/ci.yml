@@ -46,8 +46,8 @@ jobs:
         run: chmod +x gradlew
       - name: Build Debug APK
         run: |
-          df -h
-          ./gradlew assembleDebug --stacktrace
+          free -h
+          ./gradlew assembleDebug --stacktrace -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseParallelGC"
 
   build-functions:
     name: Typecheck Cloud Functions
@@ -63,6 +63,7 @@ jobs:
       - name: Build
         working-directory: functions
         run: npm run build
+
 
 
 
