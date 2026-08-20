@@ -76,7 +76,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseParallelGC"
 
       - name: Upload Android Build Artifact
         uses: actions/upload-artifact@v4
@@ -111,4 +111,5 @@ jobs:
             ./release-assets/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
