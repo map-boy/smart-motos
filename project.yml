@@ -1,4 +1,4 @@
-﻿name: SmartMotos
+name: SmartMotos
 options:
   bundleIdPrefix: com.mapboy.smartmotos
   deploymentTarget:
@@ -10,16 +10,14 @@ targets:
     type: application
     platform: iOS
     sources:
-      - path: .
+      - path: SmartMotos
         includes:
-          - "*.swift"
-        excludes:
-          - "project.yml"
+          - "**/*.swift"
       - path: GoogleService-Info.plist
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mapboy.smartmotos
-        INFOPLIST_FILE: Info.plist
+        INFOPLIST_FILE: SmartMotos/Resources/Info.plist
         CODE_SIGNING_ALLOWED: NO
         GENERATE_INFOPLIST_FILE: NO
     dependencies:
@@ -34,7 +32,3 @@ packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
     from: 10.29.0
-
-
-
-
