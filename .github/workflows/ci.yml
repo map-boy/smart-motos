@@ -42,6 +42,10 @@ jobs:
           java-version: '17'
       - name: Restore google-services.json
         run: printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > app/google-services.json
+      - name: Debug google-services.json
+        run: |
+          wc -c app/google-services.json
+          head -c 300 app/google-services.json
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       - name: Build Debug APK
@@ -61,4 +65,5 @@ jobs:
       - name: Build
         working-directory: functions
         run: npm run build
+
 
