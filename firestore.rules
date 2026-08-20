@@ -1,0 +1,53 @@
+﻿rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    function existingRole() {
+      return resource.data.role;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin() || (isSignedIn() && resource.data.role == 'driver');
+
+      allow create: if isOwner(uid)
+        && request.resource.data.role == 'passenger';
+
+      allow update: if isOwner(uid)
+        && request.resource.data.role == existingRole()
+        || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    match /roleChangeRequests/{requestId} {
+      allow read: if isOwner(resource.data.uid) || isAdmin();
+      allow create: if isOwner(request.resource.data.uid);
+      allow update, delete: if false;
+    }
+
+    match /trips/{tripId} {
+      allow read: if isSignedIn() && (resource.data.riderId == request.auth.uid || resource.data.driverId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.riderId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.riderId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /topupRequests/{requestId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}
+

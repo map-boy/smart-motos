@@ -1,2 +1,16 @@
 
 GoogleService-Info.plist
+GoogleService-Info.plist
+app/google-services.json
+.env
+*.keystore
+*.jks
+local.properties
+.gradle/
+build/
+app/build/
+functions/lib/
+functions/node_modules/
+kt_files_context.txt
+origin_version.swift
+.kotlin/
