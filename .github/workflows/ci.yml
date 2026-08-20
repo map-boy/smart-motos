@@ -41,7 +41,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       - name: Restore google-services.json
-        run: echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > app/google-services.json
+        run: printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > app/google-services.json
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       - name: Build Debug APK
@@ -61,3 +61,4 @@ jobs:
       - name: Build
         working-directory: functions
         run: npm run build
+
