@@ -337,7 +337,7 @@ class SmartRepository: ObservableObject {
         db.collection("users").document(driverId).updateData(["driverApplication.status": "rejected"])
     }
     func addManualUser(name: String, email: String, phone: String, role: UserRole, completion: @escaping (Bool, String?, String?) -> Void) {
-        functions.httpsCallable("createUserByAdmin").call([
+        functions.httpsCallable("adminCreateUser").call([
             "name": name,
             "email": email,
             "phone": phone,
@@ -353,3 +353,4 @@ class SmartRepository: ObservableObject {
         }
     }
 }
+
