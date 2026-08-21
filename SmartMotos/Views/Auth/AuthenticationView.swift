@@ -9,7 +9,6 @@ struct AuthenticationView: View {
     @State private var password = ""
     @State private var fullName = ""
     @State private var phoneNumber = ""
-    @State private var selectedRole: UserRole = .passenger
     @State private var errorMessage = ""
     @State private var isLoading = false
 
@@ -34,21 +33,19 @@ struct AuthenticationView: View {
                         .foregroundColor(.gray)
                 }
 
-                Picker("Account Type", selection: $selectedRole) {
-                    Text("Passenger").tag(UserRole.passenger)
-                    Text("Driver").tag(UserRole.driver)
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .padding(.horizontal)
-
                 VStack(spacing: 12) {
                     if isSignUp {
                         TextField("Full Name", text: $fullName)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
-                        
+
                         TextField("Phone Number (e.g. 078...)", text: $phoneNumber)
                             .keyboardType(.phonePad)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                        Text("New accounts start as Passenger. You can apply to become a driver from your profile after signing up.")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
                     }
 
                     TextField("Email", text: $email)
@@ -126,7 +123,7 @@ struct AuthenticationView: View {
                     "name": fullName.isEmpty ? "New User" : fullName,
                     "email": email,
                     "phone": phoneNumber,
-                    "role": selectedRole.rawValue,
+                    "role": UserRole.passenger.rawValue,
                     "walletBalanceRwf": 0,
                     "createdAt": FieldValue.serverTimestamp()
                 ]

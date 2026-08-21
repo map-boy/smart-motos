@@ -76,7 +76,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseParallelGC"
+        run: |
+          free -h
+          ./gradlew assembleDebug --stacktrace -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseParallelGC"
 
       - name: Upload Android Build Artifact
         uses: actions/upload-artifact@v4

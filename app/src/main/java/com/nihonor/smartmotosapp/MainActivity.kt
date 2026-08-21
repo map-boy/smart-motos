@@ -3,6 +3,7 @@
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,7 +17,7 @@ import com.nihonor.smartmotosapp.data.SmartRepository
 
 class MainActivity : ComponentActivity() {
 
-    private val authViewModel = AuthViewModel()
+    private val authViewModel: AuthViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,7 +101,7 @@ fun HomeScreen(userName: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Welcome, userName", style = MaterialTheme.typography.headlineSmall)
+        Text("Welcome, $userName", style = MaterialTheme.typography.headlineSmall)
     }
 }
 

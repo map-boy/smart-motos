@@ -42,7 +42,7 @@ Rules: read = owner, admin, or any signed-in user if `role == 'driver'`. Create 
 | vehiclePlate | string | |
 | pickup | LocationPoint (address, latitude, longitude) | |
 | dropoff | LocationPoint | |
-| status | string enum: `REQUESTED`\|`OFFERED`\|`DRIVER_ASSIGNED`\|`DRIVER_ARRIVED`\|`IN_PROGRESS`\|`COMPLETED`\|`CANCELLED` | |
+| status | string enum: `REQUESTED`\|`SEARCHING`\|`OFFERED`\|`DRIVER_ASSIGNED`\|`DRIVER_ARRIVED`\|`IN_PROGRESS`\|`COMPLETED`\|`CANCELLED`\|`NO_DRIVER_FOUND`\|`DISPATCH_ERROR` | last three are written by `functions/src/dispatch.ts`; must stay in sync with both platforms' `RideStatus` enum |
 | fareRwf | int | |
 | baseFareRwf | int | |
 | distanceKm | double | |
@@ -106,4 +106,6 @@ Rules: read = owner or admin. Create = owner only. Update/delete = disabled (`fa
 2. **`supportMessages` is hardcoded mock data**, not a Firestore collection — see `SmartRepository.swift` line ~44. There is no `collection("supportMessages")` call anywhere. Do not scaffold a Firestore-backed support chat on Android from this; it doesn't exist on iOS yet either.
 3. **`roleChangeRequests` has security rules defined but is never read or written by the app.** Either a planned-but-unbuilt feature, or dead rules left over from an earlier design. Confirm with whoever owns product scope before deciding whether Android needs it.
 4. **`DriverInfo`** is a denormalized read-model, not a separate collection — `nearbyDriversListener` queries `users` where `role == "driver"`.
+5. **Signup only ever creates `role: passenger`** on both platforms now, matching the `create` rule above exactly. Becoming a driver is a separate post-signup step (`driverApplication` map + admin approval via `approveDriver`) — there is no "sign up as driver" path, since the security rules would reject it.
+6. **New Firebase Auth users get their `users/{uid}` doc created client-side** on first successful sign-in — iOS in `AuthenticationView.handleAuthAction` (email/password signup), Android in `SmartRepository.ensureUserProfile` (called from `AuthViewModel.signInWithCredential` after phone OTP verification, since phone auth has no separate "signup" step). Without this, the app has nothing to attach its `users/{uid}` listener to.
 

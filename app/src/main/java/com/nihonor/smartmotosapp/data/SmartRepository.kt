@@ -48,6 +48,31 @@ object SmartRepository {
     private val _isDriverOnline = MutableStateFlow(false)
     val isDriverOnline: StateFlow<Boolean> = _isDriverOnline.asStateFlow()
 
+    private val _lastError = MutableStateFlow<String?>(null)
+    val lastError: StateFlow<String?> = _lastError.asStateFlow()
+
+    private fun logListenerError(context: String, error: com.google.firebase.firestore.FirebaseFirestoreException?) {
+        if (error == null) return
+        android.util.Log.e("SmartRepository", "[$context] listener error", error)
+        _lastError.value = "$context: ${error.message}"
+    }
+
+    // Creates users/{uid} with role=passenger if it doesn't exist yet (must match
+    // firestore.rules create condition exactly, or the write is rejected).
+    suspend fun ensureUserProfile(uid: String, phone: String) {
+        val doc = db.collection("users").document(uid).get().await()
+        if (doc.exists()) return
+        val newUser = mapOf(
+            "name" to "New User",
+            "email" to "",
+            "phone" to phone,
+            "role" to "passenger",
+            "walletBalanceRwf" to 0,
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+        db.collection("users").document(uid).set(newUser).await()
+    }
+
     // ---- mapping (mirrors SmartRepository.swift line-for-line) ----
 
     private fun mapUserProfile(id: String, data: Map<String, Any?>): UserProfile {
@@ -129,7 +154,8 @@ object SmartRepository {
 
     fun attachListeners(uid: String) {
         userListener?.remove()
-        userListener = db.collection("users").document(uid).addSnapshotListener { snapshot, _ ->
+        userListener = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+            logListenerError("user profile", error)
             if (snapshot != null && snapshot.exists()) {
                 val data = snapshot.data ?: return@addSnapshotListener
                 val profile = mapUserProfile(uid, data)
@@ -141,7 +167,8 @@ object SmartRepository {
         tripsListener?.remove()
         tripsListener = db.collection("trips")
             .whereEqualTo("riderId", uid)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                logListenerError("rider trips", error)
                 val list = snapshot?.documents?.mapNotNull { doc ->
                     doc.data?.let { mapRideTrip(doc.id, it) }
                 } ?: emptyList()
@@ -152,7 +179,8 @@ object SmartRepository {
         nearbyDriversListener = db.collection("users")
             .whereEqualTo("role", "driver")
             .whereEqualTo("isAvailableOnline", true)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                logListenerError("nearby drivers", error)
                 val list = snapshot?.documents?.mapNotNull { doc ->
                     val data = doc.data ?: return@mapNotNull null
                     val profile = mapUserProfile(doc.id, data)
@@ -176,7 +204,8 @@ object SmartRepository {
         driverTripsListener?.remove()
         driverTripsListener = db.collection("trips")
             .whereEqualTo("driverId", uid)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                logListenerError("driver trips", error)
                 val list = snapshot?.documents?.mapNotNull { doc ->
                     doc.data?.let { mapRideTrip(doc.id, it) }
                 } ?: emptyList()
@@ -198,7 +227,8 @@ object SmartRepository {
 
         topupsListener = db.collection("topupRequests")
             .whereEqualTo("status", "pending")
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                logListenerError("pending topups", error)
                 val list = snapshot?.documents?.mapNotNull { doc ->
                     val d = doc.data ?: return@mapNotNull null
                     TopupRequest(
@@ -216,7 +246,8 @@ object SmartRepository {
 
         pendingDriversListener = db.collection("users")
             .whereEqualTo("driverApplication.status", "pending")
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                logListenerError("pending drivers", error)
                 val list = snapshot?.documents?.mapNotNull { doc ->
                     doc.data?.let { mapUserProfile(doc.id, it) }
                 } ?: emptyList()
@@ -296,10 +327,10 @@ object SmartRepository {
             .update("driverApplication.status", "rejected")
     }
 
-    // Matches the callable createUserByAdmin function in functions/src/index.ts.
+    // Matches the callable adminCreateUser function in functions/src/index.ts.
     suspend fun addManualUser(name: String, email: String, phone: String, role: UserRole): Result<Unit> {
         return try {
-            functions.getHttpsCallable("createUserByAdmin").call(
+            functions.getHttpsCallable("adminCreateUser").call(
                 mapOf(
                     "name" to name,
                     "email" to email,

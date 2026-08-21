@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
+import com.nihonor.smartmotosapp.data.SmartRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,8 +34,10 @@ class AuthViewModel : ViewModel() {
 
     private var resendToken: PhoneAuthProvider.ForceResendingToken? = null
     private var storedVerificationId: String? = null
+    private var pendingPhoneNumber: String? = null
 
     fun sendOtp(phoneNumber: String, activity: Activity) {
+        pendingPhoneNumber = phoneNumber
         _otpState.value = OtpState.SendingCode
 
         val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
@@ -78,7 +81,11 @@ class AuthViewModel : ViewModel() {
     private fun signInWithCredential(credential: PhoneAuthCredential) {
         viewModelScope.launch {
             try {
-                auth.signInWithCredential(credential).await()
+                val result = auth.signInWithCredential(credential).await()
+                val uid = result.user?.uid
+                if (uid != null) {
+                    SmartRepository.ensureUserProfile(uid, pendingPhoneNumber ?: "")
+                }
                 _otpState.value = OtpState.Verified
             } catch (e: Exception) {
                 _otpState.value = OtpState.Error(e.message ?: "Sign-in failed")
@@ -90,5 +97,6 @@ class AuthViewModel : ViewModel() {
         _otpState.value = OtpState.Idle
         storedVerificationId = null
         resendToken = null
+        pendingPhoneNumber = null
     }
 }

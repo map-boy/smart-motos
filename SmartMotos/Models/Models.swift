@@ -8,12 +8,15 @@ enum UserRole: String, Codable {
 
 enum RideStatus: String, Codable {
     case requested = "REQUESTED"
+    case searching = "SEARCHING"
     case offered = "OFFERED"
     case driverAssigned = "DRIVER_ASSIGNED"
     case driverArrived = "DRIVER_ARRIVED"
     case inProgress = "IN_PROGRESS"
     case completed = "COMPLETED"
     case cancelled = "CANCELLED"
+    case noDriverFound = "NO_DRIVER_FOUND"
+    case dispatchError = "DISPATCH_ERROR"
 }
 
 struct LocationPoint: Codable, Equatable {
