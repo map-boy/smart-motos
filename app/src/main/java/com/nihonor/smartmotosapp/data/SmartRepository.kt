@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 // Kotlin port of SmartRepository.swift. Field names/types must match SCHEMA.md exactly —
@@ -57,10 +58,26 @@ object SmartRepository {
         _lastError.value = "$context: ${error.message}"
     }
 
+    @Volatile private var ensureInFlight = false
+
     // Creates users/{uid} with role=passenger if it doesn't exist yet (must match
     // firestore.rules create condition exactly, or the write is rejected).
     suspend fun ensureUserProfile(uid: String, phone: String) {
-        val doc = db.collection("users").document(uid).get().await()
+        if (ensureInFlight) return
+        ensureInFlight = true
+        try {
+            ensureUserProfileInner(uid, phone)
+        } finally {
+            ensureInFlight = false
+        }
+    }
+
+    private suspend fun ensureUserProfileInner(uid: String, phone: String) {
+        // Source.SERVER, not the default: an offline-cache miss must never be treated as
+        // "no profile exists", or a reconnect would clobber the real doc with blank defaults.
+        // If the server is unreachable this throws and we simply retry on the next snapshot.
+        val doc = db.collection("users").document(uid)
+            .get(com.google.firebase.firestore.Source.SERVER).await()
         if (doc.exists()) return
         val newUser = mapOf(
             "name" to "New User",
@@ -161,6 +178,19 @@ object SmartRepository {
                 val profile = mapUserProfile(uid, data)
                 _currentUser.value = profile
                 _isDriverOnline.value = profile.isAvailableOnline
+            } else if (snapshot != null && !snapshot.exists()) {
+                // Signed in with no profile doc - e.g. the post-signup write was lost to a
+                // network blip. Self-heal so the app never stays stuck on a blank profile.
+                // Deliberately not gated on metadata.isFromCache: on a poor connection the
+                // server snapshot may never arrive, and ensureUserProfile re-checks against
+                // the server itself before writing anything.
+                scope.launch {
+                    try {
+                        ensureUserProfile(uid, auth.currentUser?.phoneNumber ?: "")
+                    } catch (e: Exception) {
+                        android.util.Log.e("SmartRepository", "self-heal ensureUserProfile failed", e)
+                    }
+                }
             }
         }
 
