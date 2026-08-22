@@ -1,4 +1,4 @@
-package com.nihonor.smartmotosapp.data
+﻿package com.nihonor.smartmotosapp.data
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-// Kotlin port of SmartRepository.swift. Field names/types must match SCHEMA.md exactly —
+// Kotlin port of SmartRepository.swift. Field names/types must match SCHEMA.md exactly â€”
 // update SCHEMA.md first if the shape ever changes, then this file, not the other way around.
 object SmartRepository {
 
@@ -52,6 +52,26 @@ object SmartRepository {
 
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
+
+    // The rider's current in-flight trip, derived from the trips listener rather than
+    // fetched separately, so it can never disagree with tripHistory.
+    private val _activeRide = MutableStateFlow<RideTrip?>(null)
+    val activeRide: StateFlow<RideTrip?> = _activeRide.asStateFlow()
+
+    private val terminalStatuses = setOf(
+        RideStatus.COMPLETED, RideStatus.CANCELLED,
+        RideStatus.NO_DRIVER_FOUND, RideStatus.DISPATCH_ERROR
+    )
+
+    // Mirrors kigaliLocations in SmartRepository.swift.
+    val kigaliLocations: List<LocationPoint> = listOf(
+        LocationPoint("African Leadership University (ALU)", -1.9390, 30.1305),
+        LocationPoint("Kimironko Market", -1.9515, 30.1265),
+        LocationPoint("Kigali Convention Centre", -1.9546, 30.0931),
+        LocationPoint("Rwanda Art Museum, Kanombe", -1.9688, 30.1558),
+        LocationPoint("Nyabugogo Bus Park", -1.9385, 30.0460),
+        LocationPoint("KG 18 Ave, Remera", -1.9580, 30.1120)
+    )
 
     private fun logListenerError(context: String, error: com.google.firebase.firestore.FirebaseFirestoreException?) {
         if (error == null) return
@@ -316,6 +336,67 @@ object SmartRepository {
     }
 
     // ---- writes ----
+
+    // The iOS build writes this document straight from PassengerHomeView. Keeping it in
+    // the repository means the driver and admin flows read one definition of a trip's
+    // shape, and firestore.rules only ever sees fields SCHEMA.md documents.
+    suspend fun createRide(
+        pickup: LocationPoint,
+        dropoff: LocationPoint,
+        orderType: String,
+        paymentMethod: String,
+        bargainAmountRwf: Int?
+    ): Result<String> {
+        val rider = _currentUser.value
+        if (rider == null || rider.id.isEmpty()) {
+            return Result.failure(IllegalStateException("No signed-in user profile yet"))
+        }
+
+        val distanceKm = Fare.distanceKm(pickup, dropoff)
+        val data = hashMapOf<String, Any>(
+            "riderId" to rider.id,
+            "riderName" to rider.name,
+            "orderType" to orderType,
+            "pickup" to mapOf(
+                "address" to pickup.address,
+                "latitude" to pickup.latitude,
+                "longitude" to pickup.longitude
+            ),
+            "dropoff" to mapOf(
+                "address" to dropoff.address,
+                "latitude" to dropoff.latitude,
+                "longitude" to dropoff.longitude
+            ),
+            "fareRwf" to (bargainAmountRwf ?: Fare.quoteRwf(distanceKm)),
+            "baseFareRwf" to Fare.BASE_RWF,
+            "distanceKm" to distanceKm,
+            "durationMins" to Fare.durationMins(distanceKm),
+            "paymentMethod" to paymentMethod,
+            "status" to RideStatus.REQUESTED.name,
+            "ratingGiven" to 0,
+            "timestamp" to "Just now",
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+        // Written only when the rider actually offered a price. A present-but-null field
+        // is not the same as an absent one to either the mapper or dispatch.ts.
+        if (bargainAmountRwf != null) data["bargainAmountRwf"] = bargainAmountRwf
+
+        return try {
+            val ref = db.collection("trips").add(data).await()
+            Result.success(ref.id)
+        } catch (e: Exception) {
+            android.util.Log.e("SmartRepository", "createRide failed", e)
+            Result.failure(e)
+        }
+    }
+
+    fun cancelRide(tripId: String) {
+        db.collection("trips").document(tripId)
+            .update("status", RideStatus.CANCELLED.name)
+            .addOnFailureListener { e ->
+                android.util.Log.e("SmartRepository", "cancelRide failed", e)
+            }
+    }
 
     fun toggleDriverOnline(online: Boolean) {
         _isDriverOnline.value = online

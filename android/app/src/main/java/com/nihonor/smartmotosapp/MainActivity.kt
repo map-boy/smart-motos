@@ -1,4 +1,4 @@
-package com.nihonor.smartmotosapp
+﻿package com.nihonor.smartmotosapp
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -20,6 +20,7 @@ import com.nihonor.smartmotosapp.auth.AuthViewModel
 import com.nihonor.smartmotosapp.auth.OtpState
 import com.nihonor.smartmotosapp.data.SmartMessagingService
 import com.nihonor.smartmotosapp.data.SmartRepository
+import com.nihonor.smartmotosapp.ui.MainScaffold
 
 class MainActivity : ComponentActivity() {
 
@@ -55,7 +56,6 @@ class MainActivity : ComponentActivity() {
 fun AppRoot(authViewModel: AuthViewModel) {
     val auth = FirebaseAuth.getInstance()
     var uid by remember { mutableStateOf(auth.currentUser?.uid) }
-    val currentUser by SmartRepository.currentUser.collectAsState()
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { fa ->
@@ -74,7 +74,7 @@ fun AppRoot(authViewModel: AuthViewModel) {
     if (uid == null) {
         LoginScreen(authViewModel)
     } else {
-        HomeScreen(userName = currentUser?.name ?: "")
+        MainScaffold()
     }
 }
 
@@ -114,16 +114,3 @@ fun LoginScreen(authViewModel: AuthViewModel) {
         }
     }
 }
-
-@Composable
-fun HomeScreen(userName: String) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text("Welcome, $userName", style = MaterialTheme.typography.headlineSmall)
-    }
-}
-
-
