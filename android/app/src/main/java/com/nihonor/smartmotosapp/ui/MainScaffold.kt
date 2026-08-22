@@ -12,43 +12,60 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.nihonor.smartmotosapp.data.SmartRepository
 import com.nihonor.smartmotosapp.data.UserRole
 
-private data class Tab(val label: String, val icon: ImageVector)
-
-private val passengerTabs = listOf(
-    Tab("Home", Icons.Default.Home),
-    Tab("Trips", Icons.Default.List),
-    Tab("Wallet", Icons.Default.ShoppingCart),
-    Tab("Profile", Icons.Default.Person)
+private data class Tab(
+    val label: String,
+    val icon: ImageVector,
+    val content: @Composable (Modifier) -> Unit
 )
+
+private fun tabsFor(role: UserRole): List<Tab> = when (role) {
+    UserRole.PASSENGER -> listOf(
+        Tab("Home", Icons.Default.Home) { PassengerHomeScreen(it) },
+        Tab("Trips", Icons.Default.List) { TripHistoryScreen(it) },
+        Tab("Wallet", Icons.Default.ShoppingCart) { WalletScreen(it) },
+        Tab("Profile", Icons.Default.Person) { ProfileScreen(it) }
+    )
+    UserRole.DRIVER -> listOf(
+        Tab("Dashboard", Icons.Default.Home) { DriverHomeScreen(it) },
+        Tab("Profile", Icons.Default.Person) { ProfileScreen(it) }
+    )
+    UserRole.ADMIN -> listOf(
+        Tab("Control", Icons.Default.Home) { AdminHomeScreen(it) },
+        Tab("Profile", Icons.Default.Person) { ProfileScreen(it) }
+    )
+}
+
+private fun titleFor(role: UserRole): String = when (role) {
+    UserRole.PASSENGER -> "Smart Motos"
+    UserRole.DRIVER -> "Driver Dashboard"
+    UserRole.ADMIN -> "Admin Control"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScaffold() {
     val currentUser by SmartRepository.currentUser.collectAsState()
-    var selected by remember { mutableIntStateOf(0) }
-
-    // Driver and admin flows exist on iOS but have not been ported yet. Showing a
-    // passenger booking form to a driver would be worse than saying so plainly.
     val role = currentUser?.role ?: UserRole.PASSENGER
-    if (role != UserRole.PASSENGER) {
-        NotPortedYet(role)
-        return
-    }
+    val tabs = tabsFor(role)
+
+    var selected by remember { mutableIntStateOf(0) }
+    // An admin promoting themselves mid-session changes the tab count under us; clamp
+    // rather than let a stale index run off the end of the new list.
+    val index = selected.coerceIn(0, tabs.lastIndex)
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Smart Motos") }) },
+        topBar = { TopAppBar(title = { Text(titleFor(role)) }) },
         bottomBar = {
             NavigationBar {
-                passengerTabs.forEachIndexed { index, tab ->
+                tabs.forEachIndexed { i, tab ->
                     NavigationBarItem(
-                        selected = selected == index,
-                        onClick = { selected = index },
+                        selected = index == i,
+                        onClick = { selected = i },
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
                         label = { Text(tab.label) }
                     )
@@ -56,13 +73,7 @@ fun MainScaffold() {
             }
         }
     ) { padding ->
-        val inner = Modifier.padding(padding)
-        when (selected) {
-            0 -> PassengerHomeScreen(inner)
-            1 -> TripHistoryScreen(inner)
-            2 -> WalletScreen(inner)
-            else -> ProfileScreen(inner)
-        }
+        tabs[index].content(Modifier.padding(padding))
     }
 }
 
@@ -75,18 +86,15 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text("Profile", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                ProfileRow("Name", user?.name.orEmpty().ifEmpty { "-" })
-                ProfileRow("Phone", user?.phone.orEmpty().ifEmpty { "-" })
-                ProfileRow("Email", user?.email.orEmpty().ifEmpty { "-" })
-                ProfileRow("Role", (user?.role ?: UserRole.PASSENGER).name.lowercase().replaceFirstChar { it.uppercase() })
-                ProfileRow("Wallet", "${user?.walletBalanceRwf ?: 0} RWF")
-            }
+        SectionCard(title = "Profile") {
+            ProfileRow("Name", user?.name.orEmpty().ifEmpty { "-" })
+            ProfileRow("Phone", user?.phone.orEmpty().ifEmpty { "-" })
+            ProfileRow("Email", user?.email.orEmpty().ifEmpty { "-" })
+            ProfileRow(
+                "Role",
+                (user?.role ?: UserRole.PASSENGER).name.lowercase().replaceFirstChar { it.uppercase() }
+            )
+            ProfileRow("Wallet", "${user?.walletBalanceRwf ?: 0} RWF")
         }
 
         Button(
@@ -116,36 +124,5 @@ private fun ProfileRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun NotPortedYet(role: UserRole) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            "${role.name.lowercase().replaceFirstChar { it.uppercase() }} app not available yet",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "This role works on iOS. The Android screens for it have not been built yet.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(24.dp))
-        OutlinedButton(onClick = {
-            val uid = FirebaseAuth.getInstance().currentUser?.uid
-            if (uid == null) FirebaseAuth.getInstance().signOut()
-            else SmartRepository.clearFcmToken(uid) { FirebaseAuth.getInstance().signOut() }
-        }) {
-            Text("Sign Out")
-        }
     }
 }

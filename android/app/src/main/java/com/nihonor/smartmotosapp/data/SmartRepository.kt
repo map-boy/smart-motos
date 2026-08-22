@@ -58,6 +58,18 @@ object SmartRepository {
     private val _activeRide = MutableStateFlow<RideTrip?>(null)
     val activeRide: StateFlow<RideTrip?> = _activeRide.asStateFlow()
 
+    // Driver-side flows kept separate from the rider's activeRide: both listeners are
+    // attached at once, and a rider listener finding nothing would otherwise null out
+    // the driver's in-progress trip.
+    private val _incomingDriverRequest = MutableStateFlow<RideTrip?>(null)
+    val incomingDriverRequest: StateFlow<RideTrip?> = _incomingDriverRequest.asStateFlow()
+
+    private val _driverActiveRide = MutableStateFlow<RideTrip?>(null)
+    val driverActiveRide: StateFlow<RideTrip?> = _driverActiveRide.asStateFlow()
+
+    private val _allUsers = MutableStateFlow<List<UserProfile>>(emptyList())
+    val allUsers: StateFlow<List<UserProfile>> = _allUsers.asStateFlow()
+
     private val terminalStatuses = setOf(
         RideStatus.COMPLETED, RideStatus.CANCELLED,
         RideStatus.NO_DRIVER_FOUND, RideStatus.DISPATCH_ERROR
@@ -281,8 +293,16 @@ object SmartRepository {
                 val list = snapshot?.documents?.mapNotNull { doc ->
                     doc.data?.let { mapRideTrip(doc.id, it) }
                 } ?: emptyList()
-                // merged into the same trips flow; adjust if driver/rider views need separation
-                if (_trips.value.isEmpty()) _trips.value = list
+                // dispatch.ts writes driverId at offer time, not on accept, so an offered
+                // trip is already visible to this query.
+                _incomingDriverRequest.value = list.firstOrNull {
+                    it.status == RideStatus.OFFERED && it.offeredDriverId == uid
+                }
+                _driverActiveRide.value = list.firstOrNull {
+                    it.status == RideStatus.DRIVER_ASSIGNED ||
+                        it.status == RideStatus.DRIVER_ARRIVED ||
+                        it.status == RideStatus.IN_PROGRESS
+                }
             }
     }
 
@@ -291,6 +311,8 @@ object SmartRepository {
         tripsListener?.remove(); tripsListener = null
         nearbyDriversListener?.remove(); nearbyDriversListener = null
         driverTripsListener?.remove(); driverTripsListener = null
+        _incomingDriverRequest.value = null
+        _driverActiveRide.value = null
         detachAdminListeners()
     }
 
@@ -325,6 +347,14 @@ object SmartRepository {
                 } ?: emptyList()
                 _pendingDrivers.value = list
             }
+
+        allUsersListener?.remove()
+        allUsersListener = db.collection("users").addSnapshotListener { snapshot, error ->
+            logListenerError("all users", error)
+            _allUsers.value = snapshot?.documents?.mapNotNull { doc ->
+                doc.data?.let { mapUserProfile(doc.id, it) }
+            } ?: emptyList()
+        }
     }
 
     fun detachAdminListeners() {
@@ -333,6 +363,7 @@ object SmartRepository {
         allUsersListener?.remove(); allUsersListener = null
         _pendingTopups.value = emptyList()
         _pendingDrivers.value = emptyList()
+        _allUsers.value = emptyList()
     }
 
     // ---- writes ----
@@ -395,6 +426,46 @@ object SmartRepository {
             .update("status", RideStatus.CANCELLED.name)
             .addOnFailureListener { e ->
                 android.util.Log.e("SmartRepository", "cancelRide failed", e)
+            }
+    }
+
+    // Accepting must clear offerStatus. dispatchTimeoutSweep queries
+    // offerStatus == "offered" AND offerExpiresAtMs <= now; leaving it as "offered"
+    // means the sweep expires an already-accepted ride ~20s later and re-dispatches it
+    // to another driver. DriverHomeView.swift has this bug.
+    fun acceptTrip(tripId: String) {
+        val uid = auth.currentUser?.uid ?: return
+        val me = _currentUser.value
+        db.collection("trips").document(tripId).update(
+            mapOf(
+                "driverId" to uid,
+                "driverName" to (me?.name ?: ""),
+                "vehiclePlate" to (me?.licenseNumber ?: ""),
+                "status" to RideStatus.DRIVER_ASSIGNED.name,
+                "offerStatus" to "accepted"
+            )
+        ).addOnFailureListener { e ->
+            android.util.Log.e("SmartRepository", "acceptTrip failed", e)
+        }
+    }
+
+    // dispatchOnDriverResponse fires on offerStatus going "offered" -> "declined", then
+    // releases this driver's lock and re-offers to the next candidate. Writing status
+    // back to REQUESTED instead, as DriverHomeView.swift does, triggers nothing: the
+    // trip just waits for the one-minute sweep.
+    fun declineTrip(tripId: String) {
+        db.collection("trips").document(tripId)
+            .update("offerStatus", "declined")
+            .addOnFailureListener { e ->
+                android.util.Log.e("SmartRepository", "declineTrip failed", e)
+            }
+    }
+
+    fun updateTripStatus(tripId: String, status: RideStatus) {
+        db.collection("trips").document(tripId)
+            .update("status", status.name)
+            .addOnFailureListener { e ->
+                android.util.Log.e("SmartRepository", "updateTripStatus failed", e)
             }
     }
 
