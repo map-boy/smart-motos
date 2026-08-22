@@ -263,7 +263,9 @@ struct UserProfileView: View {
 
                 Section {
                     Button(action: {
-                        try? FirebaseAuth.Auth.auth().signOut()
+                        clearFcmTokenForCurrentUser {
+                            try? FirebaseAuth.Auth.auth().signOut()
+                        }
                     }) {
                         HStack {
                             Spacer()

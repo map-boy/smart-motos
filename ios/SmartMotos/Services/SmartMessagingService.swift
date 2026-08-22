@@ -36,3 +36,15 @@ func registerFcmTokenForCurrentUser() {
         }
     }
 }
+
+// Must run BEFORE Auth.signOut(): the write needs the signed-in user's credentials,
+// and firestore.rules rejects it once auth is gone. Leaving the token behind means
+// this device keeps receiving pushes for an account no longer signed in on it.
+func clearFcmTokenForCurrentUser(completion: @escaping () -> Void) {
+    guard let uid = Auth.auth().currentUser?.uid else {
+        completion()
+        return
+    }
+    Firestore.firestore().collection("users").document(uid)
+        .updateData(["fcmToken": FieldValue.delete()]) { _ in completion() }
+}

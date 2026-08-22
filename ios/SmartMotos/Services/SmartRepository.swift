@@ -1,4 +1,4 @@
-import Foundation
+﻿import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
@@ -51,7 +51,7 @@ class SmartRepository: ObservableObject {
     /// rider's trip history was empty).
     private func logListenerError(_ context: String, _ error: Error?) {
         guard let error = error else { return }
-        print("🔥 SmartRepository[\(context)] Firestore listener error: \(error.localizedDescription)")
+        print("ðŸ”¥ SmartRepository[\(context)] Firestore listener error: \(error.localizedDescription)")
         DispatchQueue.main.async { [weak self] in
             self?.lastFirestoreError = "\(context): \(error.localizedDescription)"
         }
@@ -64,6 +64,7 @@ class SmartRepository: ObservableObject {
             self.isAuthenticated = user != nil
             if let uid = user?.uid {
                 self.attachListeners(uid: uid)
+                registerFcmTokenForCurrentUser()
             } else {
                 self.detachListeners()
                 self.currentUser = UserProfile(id: "", name: "", email: "", phone: "", role: .passenger)
