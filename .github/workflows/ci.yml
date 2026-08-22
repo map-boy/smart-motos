@@ -1,8 +1,9 @@
-name: Build and Release
+name: CI
 on:
   push:
-    tags:
-      - 'v*'
+    branches: ['**']
+  pull_request:
+    branches: [main]
 jobs:
   build-ios:
     name: Build iOS App
@@ -20,6 +21,8 @@ jobs:
       - name: Restore GoogleService-Info.plist
         run: echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}" | base64 --decode > GoogleService-Info.plist
       - name: Generate Xcode Project
+        # XcodeGen expands ${GOOGLE_MAPS_API_KEY} in project.yml at generate time,
+        # which is what puts the key into Info.plist. Without it, place search 401s.
         env:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
         run: xcodegen generate
@@ -31,18 +34,8 @@ jobs:
             -scheme SmartMotos \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             build
-      - name: Zip .app for Appetize
-        run: |
-          cd build/Build/Products/Debug-iphonesimulator
-          zip -r SmartMotos-simulator.zip SmartMotos.app
-      - name: Upload iOS Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-release-build
-          path: ios/build/Build/Products/Debug-iphonesimulator/SmartMotos-simulator.zip
 
   build-android:
     name: Build Android App
@@ -63,34 +56,19 @@ jobs:
         run: chmod +x gradlew
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace -Dorg.gradle.jvmargs="-Xmx6g -XX:+UseParallelGC"
-      - name: Upload Android Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-release-build
-          path: android/app/build/outputs/apk/debug/app-debug.apk
 
-  create-release:
-    name: Create GitHub Release
-    needs: [build-ios, build-android]
+  build-functions:
+    name: Typecheck Cloud Functions
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    defaults:
+      run:
+        working-directory: functions
     steps:
-      - name: Download iOS Artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          name: ios-release-build
-          path: ./release-assets
-      - name: Download Android Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: android-release-build
-          path: ./release-assets
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ./release-assets/SmartMotos-simulator.zip
-            ./release-assets/app-debug.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          node-version: '20'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
