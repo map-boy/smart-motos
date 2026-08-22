@@ -220,15 +220,22 @@ struct DriverHomeView: View {
             "driverId": driverUid,
             "driverName": repository.currentUser.name,
             "vehiclePlate": repository.currentUser.licenseNumber,
-            "status": RideStatus.driverAssigned.rawValue
+            "status": RideStatus.driverAssigned.rawValue,
+            // dispatchTimeoutSweep queries offerStatus == "offered" AND
+            // offerExpiresAtMs <= now. Left as "offered", the sweep expires this
+            // accepted ride ~20s later and re-dispatches it to another driver.
+            "offerStatus": "accepted"
         ])
     }
 
     private func rejectTrip(_ tripId: String) {
         let db = Firestore.firestore()
+        // dispatchOnDriverResponse fires on offerStatus going "offered" -> "declined",
+        // which is what releases this driver's lock and re-offers to the next candidate.
+        // Writing status back to REQUESTED matches nothing: the trip would just sit
+        // until the one-minute sweep noticed it.
         db.collection("trips").document(tripId).updateData([
-            "offeredDriverId": FieldValue.delete(),
-            "status": RideStatus.requested.rawValue
+            "offerStatus": "declined"
         ])
     }
 

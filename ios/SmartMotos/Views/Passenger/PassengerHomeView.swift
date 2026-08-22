@@ -268,7 +268,7 @@ struct PassengerHomeView: View {
             "bargainAmountRwf": bargain as Any,
             "status": RideStatus.requested.rawValue,
             "ratingGiven": 0,
-            "timestampLabel": "Just now",
+            "timestamp": "Just now",
             "createdAt": Date()
         ]
 

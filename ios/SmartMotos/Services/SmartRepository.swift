@@ -276,7 +276,7 @@ class SmartRepository: ObservableObject {
             bargainAmountRwf: d["bargainAmountRwf"] as? Int,
             ratingGiven: d["ratingGiven"] as? Int ?? 0,
             ratingFeedback: d["ratingFeedback"] as? String,
-            timestamp: d["timestampLabel"] as? String ?? "",
+            timestamp: d["timestamp"] as? String ?? "",
             offeredDriverId: d["offeredDriverId"] as? String
         )
     }
