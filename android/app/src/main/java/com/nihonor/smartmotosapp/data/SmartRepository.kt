@@ -1,10 +1,11 @@
-﻿package com.nihonor.smartmotosapp.data
+package com.nihonor.smartmotosapp.data
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -88,6 +89,27 @@ object SmartRepository {
             "createdAt" to FieldValue.serverTimestamp()
         )
         db.collection("users").document(uid).set(newUser).await()
+    }
+
+    // onNewToken only fires when the token is first created or rotates. A user who
+    // installs, gets a token, then signs in later would never hit that callback while
+    // authenticated, so the token has to be fetched explicitly after login too.
+    fun registerFcmToken() {
+        FirebaseMessaging.getInstance().token
+            .addOnSuccessListener { token -> SmartMessagingService.persistToken(token) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("SmartRepository", "Failed to fetch FCM token", e)
+            }
+    }
+
+    // Clear the token on sign-out so pushes for this account stop landing on a device
+    // that is no longer signed in to it.
+    fun clearFcmToken(uid: String) {
+        db.collection("users").document(uid)
+            .update("fcmToken", FieldValue.delete())
+            .addOnFailureListener { e ->
+                android.util.Log.e("SmartRepository", "Failed to clear fcmToken", e)
+            }
     }
 
     // ---- mapping (mirrors SmartRepository.swift line-for-line) ----

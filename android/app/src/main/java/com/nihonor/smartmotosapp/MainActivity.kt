@@ -1,9 +1,14 @@
-﻿package com.nihonor.smartmotosapp
+package com.nihonor.smartmotosapp
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,14 +18,29 @@ import androidx.compose.ui.Modifier
 import com.google.firebase.auth.FirebaseAuth
 import com.nihonor.smartmotosapp.auth.AuthViewModel
 import com.nihonor.smartmotosapp.auth.OtpState
+import com.nihonor.smartmotosapp.data.SmartMessagingService
 import com.nihonor.smartmotosapp.data.SmartRepository
 
 class MainActivity : ComponentActivity() {
 
     private val authViewModel: AuthViewModel by viewModels()
 
+    // Result is ignored on purpose: a declined prompt just means no notifications,
+    // which must not block the app from starting.
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        SmartMessagingService.ensureChannel(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -42,6 +62,7 @@ fun AppRoot(authViewModel: AuthViewModel) {
             uid = fa.currentUser?.uid
             if (uid != null) {
                 SmartRepository.attachListeners(uid!!)
+                SmartRepository.registerFcmToken()
             } else {
                 SmartRepository.detachListeners()
             }

@@ -20,6 +20,7 @@ targets:
         INFOPLIST_FILE: SmartMotos/Resources/Info.plist
         CODE_SIGNING_ALLOWED: NO
         GENERATE_INFOPLIST_FILE: NO
+        GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
     dependencies:
       - package: Firebase
         products:

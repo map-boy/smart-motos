@@ -1,20 +1,39 @@
-
+# Secrets and generated Firebase config
 GoogleService-Info.plist
-GoogleService-Info.plist
-app/google-services.json
+android/app/google-services.json
 .env
 *.keystore
 *.jks
-local.properties
+
+# Android / Gradle
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
 .gradle/
-build/
-app/build/
-functions/lib/
-functions/node_modules/
-kt_files_context.txt
-origin_version.swift
 .kotlin/
 *.apk
 *.aab
+
+# iOS
+ios/*.xcodeproj/
+ios/build/
+ios/DerivedData/
+
+# Cloud Functions
+functions/lib/
+functions/node_modules/
+
+# Scratch output
+_archive/
+*.log
 build_log.txt
 app_src_listing.txt
+kt_files_context.txt
+stacktrace_output.txt
+origin_version.swift
+# Stale root-level output
+/build/
+/local.properties
+/_archive/
+
